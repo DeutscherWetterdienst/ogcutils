@@ -1,0 +1,28 @@
+{
+  "name": "ogcutils",
+  "version": "0.0.13",
+  "description": "A collection of OGC Web Services utilities based on OpenLayers and Node.js",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EduardRosert/ogcutils.git"
+  },
+  "author": "Eduard Rosert",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/EduardRosert/ogcutils/issues"
+  },
+  "homepage": "https://github.com/EduardRosert/ogcutils#readme",
+  "peerDependencies": {
+    "moment": "^2.24.0",
+    "ol": "^5.3.3"
+  },
+  "devDependencies": {
+    "moment": "^2.24.0",
+    "ol": "^5.3.3"
+  }
+}
