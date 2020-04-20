@@ -1,5 +1,5 @@
 {
-  "name": "ogcutils",
+  "name": "@deutscherwetterdienst/ogcutils",
   "version": "0.0.13",
   "description": "A collection of OGC Web Services utilities based on OpenLayers and Node.js",
   "main": "index.js",
