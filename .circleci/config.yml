@@ -7,6 +7,7 @@ defaults: &defaults
 
 orbs:
   node: circleci/node@2.0.2
+  npm-publisher: uraway/npm-publisher@0.2.0
 jobs:
   build-and-test:
     <<: *defaults  
@@ -41,7 +42,7 @@ jobs:
           at: ~/repo
       - run:
           name: Authenticate with registry
-          command: echo "//registry.npmjs.org/:_authToken=$npm_authToken" > ~/repo/.npmrc
+          command: echo "//registry.npmjs.org/:_authToken=${npm_authToken}" > ~/.npmrc
       - run:
           name: Publish package
           command: npm publish --access public
