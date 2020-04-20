@@ -16,7 +16,7 @@ jobs:
       - checkout
       - node/install:
           node-version: "12"
-      - test: node --version # TODO: add test
+      - run: node --version # TODO: add test
       - persist_to_workspace:
           root: ~/repo
           paths: .
