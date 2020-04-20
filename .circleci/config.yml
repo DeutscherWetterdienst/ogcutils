@@ -25,7 +25,7 @@ jobs:
 workflows:
     build-test-and-deploy:
       jobs:
-        - build-and-test
+        - build-and-test:
             filters:
               tags:
                 only: /^(\d+\.)*\d+/
