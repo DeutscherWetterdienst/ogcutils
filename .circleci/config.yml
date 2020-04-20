@@ -14,9 +14,23 @@ jobs:
       name: node/default
     steps:
       - checkout
+
+      - restore_cache:
+          keys:
+          - v1-dependencies-{{ checksum "package.json" }}.
+          # fallback to using the latest cache if no exact match is found
+          - v1-dependencies-
+            
       - node/install:
           node-version: "12"
+
       - run: node --version # TODO: add test
+
+      - save_cache:
+          paths:
+            - node_modules
+          key: v1-dependencies-{{ checksum "package.json" }}
+
       - persist_to_workspace:
           root: ~/repo
           paths: .
@@ -27,10 +41,10 @@ jobs:
           at: ~/repo
       - run:
           name: Authenticate with registry
-          command: echo "//registry.npmjs.org/:_authToken=$npm_authToken" > ~/.npmrc
+          command: echo "//registry.npmjs.org/:_authToken=$npm_authToken" > ~/repo/.npmrc
       - run:
           name: Publish package
-          command: npm publish
+          command: npm publish --access public
 workflows:
     build-test-and-deploy:
       jobs:
