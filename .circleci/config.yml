@@ -13,7 +13,6 @@ jobs:
             # TODO:
             #- run: npm test
   deploy:
-    <<: *defaults
     steps:
       - attach_workspace:
           at: ~/repo
@@ -24,12 +23,15 @@ jobs:
           name: Publish package
           command: npm publish
 workflows:
-    build-and-test:
+    build-test-and-deploy:
       jobs:
         - build-and-test
+            filters:
+              tags:
+                only: /^(\d+\.)*\d+/
         - deploy:
             requires:
-              - test
+              - build-and-test
             filters:
               tags:
                 only: /^(\d+\.)*\d+/
