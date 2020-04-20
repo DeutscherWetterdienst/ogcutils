@@ -44,7 +44,7 @@ jobs:
           command: echo "//registry.npmjs.org/:_authToken=${npm_authToken}" > ~/.npmrc
       - run:
           name: Test auth
-          command: echo $(pwd) && echo $(ls -la ~/.npmrc) && npm whoami
+          command: echo $(ls -la .) && npm whoami
       - run:
           name: Publish package
           command: npm publish --access public
@@ -54,13 +54,13 @@ workflows:
         - build-and-test:
             filters:
               tags:
-                only: /^(\d+\.)*\d+/
+                only: /^(\d+\.)*\d+$/
         - deploy:
             requires:
               - build-and-test
             filters:
               tags:
-                only: /^(\d+\.)*\d+/
+                only: /^(\d+\.)*\d+$/
               branches:
                 only: 
                   - master
