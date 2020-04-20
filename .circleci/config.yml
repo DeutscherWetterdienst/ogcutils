@@ -44,7 +44,7 @@ jobs:
           command: echo "https://registry.npmjs.org/:_authToken=${npm_authToken}" > ~/.npmrc
       - run:
           name: Add registry for scoped package
-          command: echo "@deutscherwetterdienst:registry=https://registry.npmjs.org/" > ~/.npmrc
+          command: echo "@deutscherwetterdienst:registry=https://registry.npmjs.org/" >> ~/.npmrc
       - run:
           name: Publish package
           command: npm publish --access public
