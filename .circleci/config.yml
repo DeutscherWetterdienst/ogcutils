@@ -14,7 +14,7 @@ jobs:
     steps:
       - checkout
       - node/install:
-          node-version: 12
+          node-version: "12"
       - run: node --version
   deploy:
     <<: *defaults  
