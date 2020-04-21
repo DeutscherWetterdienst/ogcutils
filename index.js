@@ -78,7 +78,7 @@ export function subtractTimeDelta  (time, delta) {
     var newDate = moment(time)
     Object.keys(delta).forEach(key => {
         var value = delta[key]
-        newDate = newDate.add(value, key)
+        newDate = newDate.subtract(value, key)
     });
     return newDate.toDate()
 }
@@ -169,10 +169,13 @@ export function getPeriodTimedelta  (period) {
  * ]
  *
  * @param {String} text A WMS dimension 'time' element.
+ * @param {Number} limit the maximum number available times, default is 240, set to -1 for no limit
+ * @param {Boolean} sorted if False, the times will not be sorted, default True (sorted output)
  * @returns {Date[]} an array of valid Date objects.
  * @see http://portal.opengeospatial.org/files/?artifact_id=14416 Chapter "C.2 Declaring dimensions and their allowed values" on how to format dimension named 'time'
  */
-export function enumerateAvailableTimes  (text) {
+
+export function enumerateAvailableTimes  (text, limit=240, sorted=true) {
     var definitions = text.split(",");
     var values = []
     definitions.forEach(definition => {
@@ -182,26 +185,50 @@ export function enumerateAvailableTimes  (text) {
         } else {
             // a start/end/period definition given
             var parts = definition.split("/")
-            var start = toDate(parts[0])
-            var end = toDate(parts[1])
+            var part1 = toDate(parts[0])
+            var part2 = toDate(parts[1])
+            var start = (part1.getTime() <= part2.getTime())? part1 : part2
+            var end = (part1.getTime() <= part2.getTime())? part2 : part1
             var period = parts[2]
-            values.push(start)
+            if (!values.includes(end) ){
+                values.push(end)
+            }
 
             var delta = getPeriodTimedelta(period)
+            console.log("START: ", start)
+            console.log("END: ", end)
+            console.log("TIME DELTA: ", delta)
 
             if (!delta) {
                 console.log(`Error parsing the step in time definition: '${definition}'`)
             } else {
-                // valid definition
-                while (start < end) {
-                    start = addTimeDelta(start, delta)
-                    //values.push(startButton)
+                // valid definition, start from the newest and go back
+                var timestep = end
+                if (limit == -1 ){
+                    // no limit
+                    while ( timestep.getTime() > start.getTime()) {
+                        timestep = subtractTimeDelta(timestep, delta)
+                        values.push(timestep)
+                    }
+                }else{
+                    while ( (values.length < limit) && timestep.getTime() > start.getTime()) {
+                        timestep = subtractTimeDelta(timestep, delta)
+                        values.push(timestep)
+                    }
                 }
+
             }
-            values.push(end)
+            if (!values.includes(start) ){
+                values.push(start)
+            }
         }
     });
-    return values
+
+    if (sorted){
+        return values.sort((a,b)=>a.getTime()-b.getTime());
+    }else{
+        return values
+    }
 }
 
 /**
