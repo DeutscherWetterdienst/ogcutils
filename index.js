@@ -124,15 +124,9 @@ export function getPeriodTimedelta  (period) {
     }
 
     var delta = {
-        "years": 0,
-        "months": 0,
-        "days": 0,
-        "hours": 0,
-        "minutes": 0,
-        "seconds": 0
     }
     var nonZeroTotalPeriod = false
-    Object.keys(delta).forEach(dim => {
+    Object.keys(match).forEach(dim => {
         if (match[dim]) {
             delta[dim] = parseInt(match[dim])
             if (delta[dim] > 0) {
@@ -144,13 +138,291 @@ export function getPeriodTimedelta  (period) {
 
     if (!nonZeroTotalPeriod) {
         console.log(`Invalid time period: '${period}'. Period has zero length.`)
-        return null
+        return undefined
     }
     return delta
 }
 
+
 /**
- * Converts a WMS time dimension definition into an array of Date objects representing all valid times.
+ * Converts a WMS time dimension definition into an array of time dimension objects representing all possible times.
+ *
+ * Supports single values, intervals and lists of values and intervals, e.g. '2019-11-07T09:00:00Z,2019-11-09T21:00:00Z/2019-11-22T21:00:00Z/P1D'.
+ *
+ * Example:
+ * - input:
+ *     "2019-11-07T09:00:00Z,2019-11-09T21:00:00Z/2019-11-22T21:00:00Z/P1D"
+ * - output:
+ * [
+ *     { 
+ *         "type"  : "single", 
+ *         "start" : Date("2019-11-07T09:00:00Z")
+ *     },
+ *     {
+ *         "type"  : "period", 
+ *         "start" : Date("2019-11-09T21:00:00Z"), 
+ *         "end"   : Date("2019-11-22T21:00:00Z"), 
+ *         "period" : {
+ *             "years": 0,
+ *             "months": 0,
+ *             "days": 1,
+ *             "hours": 0,
+ *             "minutes": 0,
+ *             "seconds": 0
+ *         }
+ *     }
+ * ]
+ *
+ * @param {String} text A WMS dimension 'time' element.
+ * @param {Boolean} sorted if False, the times will not be sorted, default True (sorted output)
+ * @returns {Object[]} an array of time definition objects.
+ * @see http://portal.opengeospatial.org/files/?artifact_id=14416 Chapter "C.2 Declaring dimensions and their allowed values" on how to format dimension named 'time'
+ */
+export function getTimeDimension(text, sorted=true) {
+    var definitions = text.split(",");
+    var values = []
+    definitions.forEach(definition => {
+        if (!definition.includes("/")) {
+            // simple time stamp given
+            var item = toDate(definition)
+            values.push({ "type" : "single", "start" : item })
+        } else {
+            // a start/end/period definition given
+            var parts = definition.split("/")
+            var part1 = toDate(parts[0])
+            var part2 = toDate(parts[1])
+            var start = (part1.getTime() <= part2.getTime())? part1 : part2
+            var end = (part1.getTime() <= part2.getTime())? part2 : part1
+            var period = parts[2]
+
+            var delta = getPeriodTimedelta(period)
+
+            if (!delta) {
+                console.log(`Error parsing the step in time definition: '${definition}'`)
+                values.push( { "type" : "single", "start" : start } )
+                values.push( { "type" : "single", "start" : end } )
+            } else {
+                values.push({ "type" : "period", "start" : start, "end" : end, "period" : delta })
+            }
+        }
+    });
+
+    if (sorted){
+        return sortTimeDimensions(values)
+    }else{
+        return values
+    }
+}
+
+/**
+ * Sorts an array of time dimension objects (see getTimeDimension).
+ * 
+ * @param {Object[]} timeDimensions An array of time dimension objects (see getTimeDimension)
+ * @param {Boolean} olderFirst if set to 'false', sorts from new to old, else from old to new (default)
+ * @returns {Object[]} a sorted array of time dimension objects
+ */
+export function sortTimeDimensions(timeDimensions, olderFirst = true){
+    if (olderFirst){
+        return timeDimensions.sort((a,b)=>a["start"].getTime()-b["start"].getTime());
+    }else{
+        return timeDimensions.sort((a,b)=>b["start"].getTime()-a["start"].getTime());
+    }
+}
+
+
+/**
+ * Gets the oldest available Date from a timeDimension array (see getTimeDimension)
+ * 
+ * @param {Object[]} timeDimensions An array of time dimension objects (see getTimeDimension)
+ * @returns {Date|undefined} the oldest available date or undefined if array empty
+ */
+export function getOldestDate( timeDimensions ){
+    if (timeDimensions && timeDimensions.length > 0){
+        var oldestDim = sortTimeDimensions(timeDimensions, true)[0]
+        return oldestDim["start"]
+    }
+    return undefined
+}
+/**
+ *  Gets the newest available Date from a timeDimension array (see getTimeDimension)
+ * 
+ * @param {Object[]} timeDimensions An array of time dimension objects (see getTimeDimension)
+ * @returns {Date|undefined} the newest available date or undefined if array empty
+ */
+export function getNewestDate( timeDimensions ){
+    if (timeDimensions && timeDimensions.length > 0){
+        var newestDim = sortTimeDimensions(timeDimensions, false)[0]
+        if (newestDim["type"] == "single"){
+            return newestDim["start"]
+        }else{
+            return newestDim["end"]
+        }
+    }
+    return undefined
+}
+
+/**
+ * Gets the desired number of valid Dates older than a given timestamp.
+ *
+ * @param {Object[]} timeDimensions An array of time dimension objects (see getTimeDimension)
+ * @param {Number} limit the maximum number available times, default is 240, set to -1 for no limit
+ * @param {Boolean} sorted if False, the times will not be sorted, default True (sorted output)
+ * @returns {Date[]} an array of older valid Date objects.
+ * @see http://portal.opengeospatial.org/files/?artifact_id=14416 Chapter "C.2 Declaring dimensions and their allowed values" on how to format dimension named 'time'
+ */
+export function getClosestOlderValidDates(timeDimensions, timestamp, limit=24, sorted=true) {
+    // assumes timeDimensions are sorted from oldest to newest, and are non-overlapping
+    timeDimensions = sortTimeDimensions(timeDimensions)
+    var values = []
+    timeDimensions.forEach(dim => {
+        if ( values.length >= limit ){
+            // we've collected enough dates
+            return values
+        }
+        // we haven't collected enough
+        if ( dim["type"] == "single" ){
+
+            var currentDelta = dim["start"].getTime() - timestamp.getTime()
+
+            if (currentDelta <= 0){
+                // timestamp is older
+                values.push(dim["start"])
+            }
+        }else if ( dim["type"] == "period"){
+
+            // a start/end/period definition given
+            var start = dim["start"]
+            var end = dim["end"]
+            var delta = dim["period"]
+
+            var deltaStart = start.getTime() - timestamp.getTime()
+
+            if (deltaStart > 0 ){
+                // this period is newer than the reference timestamp, so skip
+                // do nothing
+            }else{
+                // the end time stamp is newer than reference timestamp
+                // so collect values from this period
+                var timestep = end
+                var diffStep = -1
+                while (values.length < limit && timestep.getTime() >= start.getTime()){
+                    diffStep = timestep.getTime() - timestamp.getTime()
+                    if (diffStep <= 0){
+                        // timestamp is older
+                        values.push(timestep)
+                    }
+                    // next step
+                    timestep = subtractTimeDelta(timestep, delta)
+                }
+            }
+        }
+    });
+
+    if (sorted){
+        return values.sort((a,b)=>a.getTime()-b.getTime());
+    }else{
+        return values
+    }
+}
+
+/**
+ * Gets the desired number of valid Dates newer than a given timestamp.
+ *
+ * @param {Object[]} timeDimensions An array of time dimension objects (see getTimeDimension)
+ * @param {Number} limit the maximum number available times, default is 240, set to -1 for no limit
+ * @param {Boolean} sorted if False, the times will not be sorted, default True (sorted output)
+ * @returns {Date[]} an array of newer valid Date objects.
+ * @see http://portal.opengeospatial.org/files/?artifact_id=14416 Chapter "C.2 Declaring dimensions and their allowed values" on how to format dimension named 'time'
+ */
+export function getClosestNewerValidDates(timeDimensions, timestamp, limit=24, sorted=true) {
+    // assumes timeDimensions are sorted from oldest to newest, and are non-overlapping
+    timeDimensions = sortTimeDimensions(timeDimensions)
+    var values = []
+    timeDimensions.forEach(dim => {
+        if ( values.length >= limit ){
+            // we've collected enough dates
+            return values
+        }
+        // we haven't collected enough
+        if ( dim["type"] == "single" ){
+
+            var currentDelta = dim["start"].getTime() - timestamp.getTime()
+
+            if (currentDelta >= 0){
+                // timestamp is newer
+                values.push(dim["start"])
+            }
+        }else if ( dim["type"] == "period"){
+
+            // a start/end/period definition given
+            var start = dim["start"]
+            var end = dim["end"]
+            var delta = dim["period"]
+
+            var deltaEnd = end.getTime() - timestamp.getTime()
+
+            if (deltaEnd < 0 ){
+                // this period is older than the reference timestamp, so skip
+                // do nothing
+            }else{
+                // the end time stamp is newer than reference timestamp
+                // so collect values from this period
+                var timestep = start
+                var diffStep = -1
+                while (values.length < limit && timestep.getTime() <= end.getTime()){
+                    diffStep = timestep.getTime() - timestamp.getTime()
+                    if (diffStep >= 0){
+                        // timestamp is newer
+                        values.push(timestep)
+                    }
+                    // next step
+                    timestep = addTimeDelta(timestep, delta)
+                }
+            }
+        }
+    });
+
+    if (sorted){
+        return values.sort((a,b)=>a.getTime()-b.getTime());
+    }else{
+        return values
+    }
+}
+
+
+/**
+ * Converts a time dimension object (see getTimeDimension) into an array of Date objects representing the newest N valid times.
+ *
+ * Supports single values, intervals and lists of values and intervals, e.g. '2019-11-07T09:00:00Z,2019-11-09T21:00:00Z/2019-11-22T21:00:00Z/P1D'.
+ *
+ * Example:
+ * - input:
+ *     "2019-11-07T09:00:00Z,2019-11-09T21:00:00Z/2019-11-22T21:00:00Z/P1D"
+ * - output:
+ * [   Date("2019-11-07T09:00:00Z"),
+ *     Date("2019-11-09T21:00:00Z"),
+ *     Date("2019-11-09T21:00:00Z"),
+ *     Date("2019-11-10T21:00:00Z"),
+ *     Date("2019-11-11T21:00:00Z"),
+ *     ... ,
+ *     Date("2019-11-21T21:00:00Z"),
+ *     Date("2019-11-22T21:00:00Z")
+ * ]
+ *
+ * @param {Object[]} timeDimensions An array of time dimension objects (see getTimeDimension)
+ * @param {Number} limit the maximum number available times, default is 240, set to -1 for no limit
+ * @param {Boolean} sorted if False, the times will not be sorted, default True (sorted output)
+ * @returns {Date[]} an array of valid Date objects.
+ * @see http://portal.opengeospatial.org/files/?artifact_id=14416 Chapter "C.2 Declaring dimensions and their allowed values" on how to format dimension named 'time'
+ */
+export function enumerateAvailableTimesFromDimension(timeDimensions, limit=240, sorted=true) {
+    var newestDate = getNewestDate(timeDimensions)
+    //console.log("NEWEST DATE: ", newestDate)
+    return getClosestOlderValidDates(timeDimensions, newestDate, limit, sorted)
+}
+
+/**
+ * Converts a WMS time dimension definition into an array of Date objects representing the newest N valid times.
  *
  * Supports single values, intervals and lists of values and intervals, e.g. '2019-11-07T09:00:00Z,2019-11-09T21:00:00Z/2019-11-22T21:00:00Z/P1D'.
  *
@@ -174,61 +446,9 @@ export function getPeriodTimedelta  (period) {
  * @returns {Date[]} an array of valid Date objects.
  * @see http://portal.opengeospatial.org/files/?artifact_id=14416 Chapter "C.2 Declaring dimensions and their allowed values" on how to format dimension named 'time'
  */
-
-export function enumerateAvailableTimes  (text, limit=240, sorted=true) {
-    var definitions = text.split(",");
-    var values = []
-    definitions.forEach(definition => {
-        if (!definition.includes("/")) {
-            // simple time stamp given
-            values.push(toDate(definition))
-        } else {
-            // a start/end/period definition given
-            var parts = definition.split("/")
-            var part1 = toDate(parts[0])
-            var part2 = toDate(parts[1])
-            var start = (part1.getTime() <= part2.getTime())? part1 : part2
-            var end = (part1.getTime() <= part2.getTime())? part2 : part1
-            var period = parts[2]
-            if (!values.includes(end) ){
-                values.push(end)
-            }
-
-            var delta = getPeriodTimedelta(period)
-            console.log("START: ", start)
-            console.log("END: ", end)
-            console.log("TIME DELTA: ", delta)
-
-            if (!delta) {
-                console.log(`Error parsing the step in time definition: '${definition}'`)
-            } else {
-                // valid definition, start from the newest and go back
-                var timestep = end
-                if (limit == -1 ){
-                    // no limit
-                    while ( timestep.getTime() > start.getTime()) {
-                        timestep = subtractTimeDelta(timestep, delta)
-                        values.push(timestep)
-                    }
-                }else{
-                    while ( (values.length < limit) && timestep.getTime() > start.getTime()) {
-                        timestep = subtractTimeDelta(timestep, delta)
-                        values.push(timestep)
-                    }
-                }
-
-            }
-            if (!values.includes(start) ){
-                values.push(start)
-            }
-        }
-    });
-
-    if (sorted){
-        return values.sort((a,b)=>a.getTime()-b.getTime());
-    }else{
-        return values
-    }
+export function enumerateAvailableTimes(text, limit=240, sorted=true) {
+    var dimensions = getTimeDimension(text, sorted)
+    return enumerateAvailableTimesFromDimension(dimensions, limit, sorted)
 }
 
 /**
@@ -335,7 +555,7 @@ export function getAvailableLayers  (capaUrl) {
                         "name": cl.Name,
                         "title": cl.Title,
                         "getMapEndpointUrl" : getMapUrl,
-                        "time": null,
+                        "time": undefined,
                         "boundingBox": getBoundingBoxLatLon(cl) //lat,lon is WMS 1.3.0 default
                     }
                     if (cl.Dimension) {
@@ -347,6 +567,8 @@ export function getAvailableLayers  (capaUrl) {
                                     layer["time"] = toDate(dim.default)
                                 }
                                 if (dim.units === "ISO8601") {
+                                    var timedim = getTimeDimension(dim.values)
+                                    layer["timeDefinition"] = getTimeDimension(dim.values)
                                     layer["times"] = enumerateAvailableTimes(dim.values)
                                 }
                             }
