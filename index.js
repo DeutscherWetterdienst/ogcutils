@@ -54,7 +54,7 @@ export function toDate  (isoTime) {
  * @see getPeriodTimedelta on how to get a delta object from an ISO8601 period string.
  */
 export function addTimeDelta  (time, delta) {
-    var newDate = moment(time)
+    var newDate = moment.utc(time)
     Object.keys(delta).forEach(key => {
         var value = delta[key]
         newDate = newDate.add(value, key)
@@ -75,7 +75,7 @@ export function addTimeDelta  (time, delta) {
  * @see getPeriodTimedelta on how to get a delta object from an ISO8601 period string.
  */
 export function subtractTimeDelta  (time, delta) {
-    var newDate = moment(time)
+    var newDate = moment.utc(time)
     Object.keys(delta).forEach(key => {
         var value = delta[key]
         newDate = newDate.subtract(value, key)
