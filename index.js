@@ -19,7 +19,7 @@ import Geometry from 'ol/geom/Geometry';
 import moment from 'moment';
 
 
-const LAYER_BLACKLIST = ["background", "foreground", "grid", "boundaries", "oceans", "bluemarble", "Natural_Earth_Map"]
+const LAYER_BLACKLIST = ["background", "foreground", "grid", "boundaries", "oceans", "bluemarble", "Natural_Earth_Map", "us-states"]
 const PERIODICITY_PATTERN = new RegExp(/^P((\d+)Y)?((\d+)M)?((\d+)D)?(T((\d+)H)?((\d+)M)?((\d+)S)?)?$/, 'i') // precompiled RegExp
 
 
